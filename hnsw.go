@@ -8,6 +8,7 @@ package hnswgo
 import "C"
 import (
 	"errors"
+	"runtime"
 	"unsafe"
 )
 
@@ -51,9 +52,11 @@ func New(dim, M, efConstruction, randSeed int, maxElements uint64, spaceType Spa
 
 	cindex := C.newIndex(sType, C.int(dim), C.size_t(maxElements), C.int(M), C.int(efConstruction), C.int(randSeed), C.int(allowReplace))
 
-	return &HnswIndex{
+	idx := &HnswIndex{
 		index: cindex,
 	}
+	runtime.SetFinalizer(idx, (*HnswIndex).Free)
+	return idx
 }
 
 // Loads data from existing HNSW index.
@@ -78,9 +81,11 @@ func Load(location string, spaceType SpaceType, dim int, maxElements uint64, all
 
 	cindex := C.loadIndex(cloc, sType, C.int(dim), C.size_t(maxElements), C.int(allowReplace))
 
-	return &HnswIndex{
+	idx := &HnswIndex{
 		index: cindex,
 	}
+	runtime.SetFinalizer(idx, (*HnswIndex).Free)
+	return idx
 }
 
 // Sets the query time accuracy/speed trade-off, defined by the ef parameter ( see doc ALGO_PARAMS.md of hnswlib).
@@ -179,6 +184,9 @@ func (idx *HnswIndex) SearchKNN(vectors [][]float32, topK int, concurrency int) 
 		C.int(concurrency),
 	)
 
+	if cResult == nil {
+		return nil, errors.New("search failed: internal error")
+	}
 	defer C.freeResult(cResult)
 
 	results := make([][]*SearchResult, rows) //the resulting slice
@@ -236,6 +244,10 @@ func (idx *HnswIndex) GetCurrentCount() uint64 {
 }
 
 // Free resources bound to the index. Should be called when index is destroyed on close.
+// Safe to call multiple times.
 func (idx *HnswIndex) Free() {
-	C.freeHNSW(idx.index)
+	if idx.index != nil {
+		C.freeHNSW(idx.index)
+		idx.index = nil
+	}
 }
