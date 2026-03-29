@@ -332,8 +332,19 @@ int getAllowReplaceDeleted(HnswIndex *index) {
 }
 
 void getDataByLabel(HnswIndex *index, const size_t label, float* data) {
-    auto vec = ((hnswlib::HierarchicalNSW<float> *)index->hnsw)->getDataByLabel<float>(label);
-    data = vec.data();
+    try {
+        auto vec = ((hnswlib::HierarchicalNSW<float> *)index->hnsw)->getDataByLabel<float>(label);
+        // Copy data to output buffer
+        for (size_t i = 0; i < vec.size(); i++) {
+            data[i] = vec[i];
+        }
+    } catch (const std::exception& e) {
+        // Label not found or other error - return zeros
+        size_t dim = index->dim;
+        for (size_t i = 0; i < dim; i++) {
+            data[i] = 0.0f;
+        }
+    }
 }
 
 void freeHNSW(HnswIndex *index)

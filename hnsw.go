@@ -209,7 +209,7 @@ func (idx *HnswIndex) SearchKNN(vectors [][]float32, topK int, concurrency int) 
 func (idx *HnswIndex) GetDataByLabel(label uint64) []float32 {
 	var vec []float32 = make([]float32, idx.index.dim)
 
-	C.getDataByLabel(idx.index, C.size_t(label), (*C.float)(unsafe.Pointer(&vec)))
+	C.getDataByLabel(idx.index, C.size_t(label), (*C.float)(unsafe.Pointer(&vec[0])))
 	return vec
 }
 

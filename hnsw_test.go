@@ -124,12 +124,12 @@ func TestReplacePoint(t *testing.T) {
 
 	index.MarkDeleted(labels[len(labels)-1])
 
-	err := index.AddPoints([][]float32{randomPoint(dim)}, []uint64{math.MaxUint64-1}, 1, false)
+	err := index.AddPoints([][]float32{randomPoint(dim)}, []uint64{math.MaxUint64 - 1}, 1, false)
 	if err == nil {
 		t.Fail()
 	}
 
-	err = index.AddPoints([][]float32{randomPoint(dim)}, []uint64{math.MaxUint64-1}, 1, true)
+	err = index.AddPoints([][]float32{randomPoint(dim)}, []uint64{math.MaxUint64 - 1}, 1, true)
 	if err != nil {
 		t.Fail()
 	}
@@ -137,34 +137,126 @@ func TestReplacePoint(t *testing.T) {
 }
 
 func TestVectorSearch(t *testing.T) {
-	dim := 400
-	batchSize := 100
-	maxElements := batchSize * 10000
+	// Test 1: Basic search with valid index
+	t.Run("BasicSearch", func(t *testing.T) {
+		index := newTestIndex(1, false)
+		index.SetEf(efConstruction)
+		defer index.Free()
 
-	index := Load("./example.data", Cosine, dim, uint64(maxElements), true)
-	index.SetEf(efConstruction)
-	defer index.Free()
+		query := genQuery(dim, 10)
+		topK := 5
 
-	query := genQuery(dim, 10)
-	topK := 5
-
-	result, err := index.SearchKNN(query, topK, 1)
-	if err != nil {
-		t.Error(err)
-		t.Fail()
-		return
-	}
-
-	if len(result) != len(query) {
-		t.Fail()
-	}
-
-	for _, rv := range result {
-		if len(rv) != topK {
-			t.Fail()
-			break
+		result, err := index.SearchKNN(query, topK, 1)
+		if err != nil {
+			t.Errorf("SearchKNN failed: %v", err)
+			return
 		}
-	}
+
+		if len(result) != len(query) {
+			t.Errorf("expected %d results, got %d", len(query), len(result))
+		}
+
+		for i, rv := range result {
+			if len(rv) != topK {
+				t.Errorf("query %d: expected %d results, got %d", i, topK, len(rv))
+			}
+		}
+	})
+
+	// Test 2: Verify distances are in ascending order
+	t.Run("SortedDistances", func(t *testing.T) {
+		index := newTestIndex(1, false)
+		index.SetEf(efConstruction)
+		defer index.Free()
+
+		query := genQuery(dim, 1)
+		result, err := index.SearchKNN(query, 5, 1)
+		if err != nil {
+			t.Errorf("SearchKNN failed: %v", err)
+			return
+		}
+
+		for i, rv := range result {
+			for j := 1; j < len(rv); j++ {
+				if rv[j].Distance < rv[j-1].Distance {
+					t.Errorf("query %d: distances not sorted at position %d: %f > %f",
+						i, j, rv[j-1].Distance, rv[j].Distance)
+				}
+			}
+		}
+	})
+
+	// Test 3: Edge case - k larger than maxElements returns error (expected behavior)
+	t.Run("KExceedsElements", func(t *testing.T) {
+		index := newTestIndex(1, false) // 100 elements
+		index.SetEf(efConstruction)
+		defer index.Free()
+
+		query := genQuery(dim, 1)
+		// Request more than available - library returns error
+		_, err := index.SearchKNN(query, 200, 1)
+		if err == nil {
+			t.Errorf("expected error when k > maxElements, got nil")
+		}
+	})
+
+	// Test 4: Edge case - search with k=1
+	t.Run("SingleK", func(t *testing.T) {
+		index := newTestIndex(1, false)
+		index.SetEf(efConstruction)
+		defer index.Free()
+
+		query := genQuery(dim, 1)
+		result, err := index.SearchKNN(query, 1, 1)
+		if err != nil {
+			t.Errorf("SearchKNN failed: %v", err)
+			return
+		}
+
+		if len(result[0]) != 1 {
+			t.Errorf("expected 1 result, got %d", len(result[0]))
+		}
+	})
+
+	// Test 5: Verify results are labeled (not empty labels)
+	t.Run("ValidLabels", func(t *testing.T) {
+		index := newTestIndex(1, false)
+		index.SetEf(efConstruction)
+		defer index.Free()
+
+		query := genQuery(dim, 1)
+		result, err := index.SearchKNN(query, 5, 1)
+		if err != nil {
+			t.Errorf("SearchKNN failed: %v", err)
+			return
+		}
+
+		for i, rv := range result {
+			for j, r := range rv {
+				if r.Label == 0 {
+					t.Errorf("query %d: result %d has empty label", i, j)
+				}
+			}
+		}
+	})
+
+	// Test 6: Multiple queries in a single call
+	t.Run("MultipleQueries", func(t *testing.T) {
+		index := newTestIndex(3, false) // 300 elements
+		index.SetEf(efConstruction)
+		defer index.Free()
+
+		query := genQuery(dim, 50)
+		result, err := index.SearchKNN(query, 10, 1)
+		if err != nil {
+			t.Errorf("SearchKNN failed: %v", err)
+			return
+		}
+
+		if len(result) != 50 {
+			t.Errorf("expected 50 results, got %d", len(result))
+		}
+	})
 
 }
 
