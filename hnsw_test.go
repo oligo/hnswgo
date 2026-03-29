@@ -5,6 +5,7 @@ import (
 	"math"
 	"math/rand"
 	"os"
+	"slices"
 	"testing"
 )
 
@@ -261,6 +262,96 @@ func TestVectorSearch(t *testing.T) {
 }
 
 func TestGetVectorData(t *testing.T) {
+	// Test 1: Retrieve a known vector by label
+	t.Run("RetrieveKnownVector", func(t *testing.T) {
+		index := newTestIndex(1, false)
+		index.SetEf(efConstruction)
+		defer index.Free()
+
+		// Label 0 was added first (see randomPoints starting at 0)
+		label := uint64(0)
+		vec := index.GetDataByLabel(label)
+
+		if len(vec) != dim {
+			t.Errorf("expected vector dimension %d, got %d", dim, len(vec))
+		}
+	})
+
+	// Test 2: Verify retrieved vector matches original via search
+	t.Run("VerifyRetrievedMatchesOriginal", func(t *testing.T) {
+		index := New(dim, M, efConstruction, 55, uint64(400), Cosine, false)
+		index.SetEf(efConstruction)
+		defer index.Free()
+
+		// Create a query vector with known values
+		queryVec := make([]float32, dim)
+		for i := 0; i < dim; i++ {
+			queryVec[i] = 0.5 // fixed value for testing
+		}
+		query := [][]float32{queryVec}
+		testLabel := uint64(9999)
+
+		index.AddPoints(query, []uint64{testLabel}, 1, false)
+
+		// Retrieve it back
+		retrieved := index.GetDataByLabel(testLabel)
+
+		// Verify dimension matches
+		if len(retrieved) != dim {
+			t.Errorf("expected dimension %d, got %d", dim, len(retrieved))
+		}
+
+		// Check that we got some values (not all zeros)
+		var sum float32
+		for _, v := range retrieved {
+			sum += v
+		}
+		if sum == 0 {
+			t.Error("expected non-zero vector values after retrieval")
+		}
+	})
+
+	// Test 3: Get dimension of returned vector
+	t.Run("GetDimension", func(t *testing.T) {
+		index := newTestIndex(1, false)
+		index.SetEf(efConstruction)
+		defer index.Free()
+
+		vec := index.GetDataByLabel(0)
+		// Verify we got a vector of correct dimension
+		if len(vec) != dim {
+			t.Errorf("expected dimension %d, got %d", dim, len(vec))
+		}
+	})
+
+	// Test 4: Retrieve multiple vectors in sequence
+	t.Run("MultipleRetrievals", func(t *testing.T) {
+		index := newTestIndex(1, false)
+		index.SetEf(efConstruction)
+		defer index.Free()
+
+		// Retrieve multiple existing vectors
+		for label := uint64(0); label < 5; label++ {
+			vec := index.GetDataByLabel(label)
+			if len(vec) != dim {
+				t.Errorf("label %d: expected dimension %d, got %d", label, dim, len(vec))
+			}
+		}
+	})
+
+	// Test 5: Non-existent label should return zero valued vector.
+	t.Run("NonExistentLabelThrows", func(t *testing.T) {
+		index := newTestIndex(1, false)
+		index.SetEf(efConstruction)
+		defer index.Free()
+		vec := index.GetDataByLabel(99999)
+
+		zeorVal := make([]float32, dim)
+		t.Log(vec)
+		if len(vec) != dim || !slices.Equal(zeorVal, vec) {
+			t.Error("should return zero value for label")
+		}
+	})
 
 }
 
